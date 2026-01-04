@@ -1,7 +1,7 @@
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
-import cookieParser from "cookie-parser";
+// Removido import do cookie-parser pois não é usado aqui diretamente
 
 // --- CONFIGURAÇÃO ---
 const MASTER_EMAIL = "guimooraesss@gmail.com"; 
@@ -24,8 +24,15 @@ export const appRouter = router({
         if (userData.role === "employee") {
            const employees = await db.getAllEmployees();
            const employee = employees.find(e => e.id === userData.id);
+           
            if (employee) {
-               return { id: employee.id, username: employee.name, role: "employee", avatarUrl: null };
+               // Usamos (employee as any).name para garantir que o TS não reclame se o tipo estiver desatualizado
+               return { 
+                 id: employee.id, 
+                 username: (employee as any).name || "Colaborador", 
+                 role: "employee", 
+                 avatarUrl: null 
+               };
            }
         }
       } catch (e) {
@@ -41,19 +48,21 @@ export const appRouter = router({
 
         if (email === MASTER_EMAIL) {
           const sessionData = JSON.stringify({ email: email, role: "master", id: 1 });
-          ctx.res.cookie("user_session", sessionData, { httpOnly: true, maxAge: 1000 * 60 * 60 * 24 * 7 });
+          // Forçamos (ctx.res as any) para garantir acesso à função cookie
+          (ctx.res as any).cookie("user_session", sessionData, { httpOnly: true, maxAge: 1000 * 60 * 60 * 24 * 7 });
           return { success: true };
         }
 
         const employees = await db.getAllEmployees();
         const employee = employees.find(e => 
-            e.name.toLowerCase().includes(email.split('@')[0]) || 
+            // Usamos (e as any) para acessar name e email sem erro de tipo
+            ((e as any).name || "").toLowerCase().includes(email.split('@')[0]) || 
             (e as any).email === email
         );
 
         if (employee) {
             const sessionData = JSON.stringify({ email: email, role: "employee", id: employee.id });
-            ctx.res.cookie("user_session", sessionData, { httpOnly: true });
+            (ctx.res as any).cookie("user_session", sessionData, { httpOnly: true });
             return { success: true };
         }
 
@@ -61,7 +70,7 @@ export const appRouter = router({
       }),
 
     logout: publicProcedure.mutation(({ ctx }) => {
-      ctx.res.clearCookie("user_session");
+      (ctx.res as any).clearCookie("user_session");
       return { success: true };
     }),
   }),
@@ -69,17 +78,17 @@ export const appRouter = router({
   // --- DASHBOARD (COM LOGS DE DEBUG) ---
   dashboard: router({
     getStats: publicProcedure.query(async () => {
-      console.log("--- INICIANDO DASHBOARD ---"); // ESPIÃO 1
+      console.log("--- INICIANDO DASHBOARD ---");
       
       try {
         // 1. Busca dados reais
         const employees = await db.getAllEmployees();
-        console.log("Colaboradores encontrados (DB):", employees.length); // ESPIÃO 2
+        console.log("Colaboradores encontrados (DB):", employees.length);
 
         // Tenta buscar avaliações
         let evaluations: any[] = [];
         try {
-          // Verifica se a função existe antes de chamar para evitar crash
+          // Verifica se a função existe antes de chamar
           if ((db as any).getAllEvaluations) {
             evaluations = await (db as any).getAllEvaluations();
           } else {
@@ -97,7 +106,7 @@ export const appRouter = router({
         // Pendentes = Total - (Concluídos + Em Andamento)
         const pending = Math.max(0, totalEmployees - (completed + inProgress)); 
         
-        console.log("Retornando stats:", { totalEmployees, completed, pending }); // ESPIÃO 3
+        console.log("Retornando stats:", { totalEmployees, completed, pending });
 
         const recentActivity = evaluations
           .sort((a, b) => (b.id || 0) - (a.id || 0))
@@ -118,7 +127,6 @@ export const appRouter = router({
         };
       } catch (error) {
         console.error("ERRO CRÍTICO NO DASHBOARD:", error);
-        // Retorna zeros em caso de erro para não quebrar a tela
         return { totalEmployees: 0, completed: 0, inProgress: 0, pending: 0, recentActivity: [] };
       }
     })

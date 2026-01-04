@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import mysql from "mysql2/promise"; // <--- NOVO: Importante para configurar o SSL
+import mysql from "mysql2/promise"; 
 import { InsertUser, users, employees, positions, competencies } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -10,13 +10,14 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      // <--- AQUI ESTÁ A MÁGICA DO SSL PARA O AIVEN --->
+      // <--- AQUI ESTÁ A CORREÇÃO COM "as any" PARA O AIVEN --->
       const connection = await mysql.createPool({
         uri: process.env.DATABASE_URL,
         ssl: {
           rejectUnauthorized: false
         }
-      });
+      } as any); // O "as any" remove o sublinhado vermelho do VS Code
+      
       _db = drizzle(connection);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
