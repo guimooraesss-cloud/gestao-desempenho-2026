@@ -2,12 +2,13 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { Users, CheckCircle, Clock, AlertCircle, Download, Filter, X } from "lucide-react";
+import { Users, CheckCircle, Clock, AlertCircle, Download, Filter, X, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { trpc } from "@/lib/trpc"; // <--- 1. Importamos a conexão com o servidor
 
+// --- DADOS FAKES (MANTIDOS POR ENQUANTO PARA OS GRÁFICOS) ---
 const mockEvaluationData = [
   { month: "Jan", completed: 12, pending: 8, inProgress: 5 },
   { month: "Fev", completed: 15, pending: 6, inProgress: 4 },
@@ -27,6 +28,10 @@ const PERIODS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho"];
 
 export default function Dashboard() {
   const { user, isAuthenticated } = useAuth();
+  
+  // <--- 2. Buscamos os colaboradores reais do banco
+  const { data: employees, isLoading } = trpc.employees.list.useQuery();
+  
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
     period: "",
@@ -49,22 +54,22 @@ export default function Dashboard() {
     );
   }
 
+  // Calcula o número real (ou 0 se estiver carregando)
+  const totalEmployees = employees?.length || 0;
+
   const handleExportPDF = () => {
     const content = `
 RELATÓRIO DE DESEMPENHO RH
 Data: ${new Date().toLocaleDateString("pt-BR")}
 Período: ${filters.period || "Todos"}
-Departamento: ${filters.department || "Todos"}
-Líder: ${filters.leader || "Todos"}
 
 MÉTRICAS PRINCIPAIS:
-- Total de Colaboradores: 248
-- Avaliações Concluídas: 156
-- Em Progresso: 62
-- Pendentes: 30
+- Total de Colaboradores: ${totalEmployees}
+- Avaliações Concluídas: 156 (Simulado)
+- Em Progresso: 62 (Simulado)
 
 RESUMO:
-Este relatório apresenta uma análise completa do ciclo de avaliações de desempenho.
+Este relatório apresenta uma análise do ciclo de avaliações.
     `;
     
     const blob = new Blob([content], { type: "text/plain" });
@@ -78,15 +83,9 @@ Este relatório apresenta uma análise completa do ciclo de avaliações de dese
   const handleExportExcel = () => {
     const csvContent = [
       ["Métrica", "Valor"],
-      ["Total de Colaboradores", "248"],
+      ["Total de Colaboradores", totalEmployees],
       ["Avaliações Concluídas", "156"],
       ["Em Progresso", "62"],
-      ["Pendentes", "30"],
-      [""],
-      ["Filtros Aplicados"],
-      ["Período", filters.period || "Todos"],
-      ["Departamento", filters.department || "Todos"],
-      ["Líder", filters.leader || "Todos"],
     ]
       .map(row => row.join(","))
       .join("\n");
@@ -153,23 +152,15 @@ Este relatório apresenta uma análise completa do ciclo de avaliações de dese
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Período */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Período
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Período</label>
                   <Select
                     value={filters.period}
-                    onValueChange={(value) =>
-                      setFilters({ ...filters, period: value })
-                    }
+                    onValueChange={(value) => setFilters({ ...filters, period: value })}
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um período" />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Selecione um período" /></SelectTrigger>
                     <SelectContent>
                       {PERIODS.map((period) => (
-                        <SelectItem key={period} value={period}>
-                          {period}
-                        </SelectItem>
+                        <SelectItem key={period} value={period}>{period}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -177,23 +168,15 @@ Este relatório apresenta uma análise completa do ciclo de avaliações de dese
 
                 {/* Departamento */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Departamento
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Departamento</label>
                   <Select
                     value={filters.department}
-                    onValueChange={(value) =>
-                      setFilters({ ...filters, department: value })
-                    }
+                    onValueChange={(value) => setFilters({ ...filters, department: value })}
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um departamento" />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Selecione um departamento" /></SelectTrigger>
                     <SelectContent>
                       {DEPARTMENTS.map((dept) => (
-                        <SelectItem key={dept} value={dept}>
-                          {dept}
-                        </SelectItem>
+                        <SelectItem key={dept} value={dept}>{dept}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -201,23 +184,15 @@ Este relatório apresenta uma análise completa do ciclo de avaliações de dese
 
                 {/* Líder */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Líder
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Líder</label>
                   <Select
                     value={filters.leader}
-                    onValueChange={(value) =>
-                      setFilters({ ...filters, leader: value })
-                    }
+                    onValueChange={(value) => setFilters({ ...filters, leader: value })}
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um líder" />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Selecione um líder" /></SelectTrigger>
                     <SelectContent>
                       {LEADERS.map((leader) => (
-                        <SelectItem key={leader} value={leader}>
-                          {leader}
-                        </SelectItem>
+                        <SelectItem key={leader} value={leader}>{leader}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -227,48 +202,38 @@ Este relatório apresenta uma análise completa do ciclo de avaliações de dese
               {/* Botões de Ação */}
               <div className="flex gap-2 mt-4">
                 {hasActiveFilters && (
-                  <Button
-                    variant="outline"
-                    onClick={clearFilters}
-                    className="gap-2"
-                  >
-                    <X className="h-4 w-4" />
-                    Limpar Filtros
+                  <Button variant="outline" onClick={clearFilters} className="gap-2">
+                    <X className="h-4 w-4" /> Limpar Filtros
                   </Button>
                 )}
                 <div className="flex-1" />
-                <Button onClick={() => setShowFilters(false)}>
-                  Aplicar Filtros
-                </Button>
+                <Button onClick={() => setShowFilters(false)}>Aplicar Filtros</Button>
               </div>
-
-              {/* Resumo dos Filtros Ativos */}
-              {hasActiveFilters && (
-                <div className="mt-4 p-3 bg-white rounded border border-blue-200">
-                  <p className="text-sm text-gray-700">
-                    <strong>Filtros Ativos:</strong>{" "}
-                    {[filters.period, filters.department, filters.leader]
-                      .filter(Boolean)
-                      .join(" • ")}
-                  </p>
-                </div>
-              )}
             </CardContent>
           </Card>
         )}
 
         {/* KPI Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          
+          {/* --- CARD DE COLABORADORES REAL --- */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total de Colaboradores</CardTitle>
               <Users className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">248</div>
+              <div className="text-2xl font-bold flex items-center gap-2">
+                {isLoading ? (
+                   <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                ) : (
+                   totalEmployees // <--- 3. AQUI ESTÁ O NÚMERO REAL
+                )}
+              </div>
               <p className="text-xs text-gray-500">Ativos na plataforma</p>
             </CardContent>
           </Card>
+          {/* ---------------------------------- */}
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -277,7 +242,7 @@ Este relatório apresenta uma análise completa do ciclo de avaliações de dese
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">156</div>
-              <p className="text-xs text-gray-500">Neste ciclo</p>
+              <p className="text-xs text-gray-500">Neste ciclo (Simulado)</p>
             </CardContent>
           </Card>
 
@@ -288,7 +253,7 @@ Este relatório apresenta uma análise completa do ciclo de avaliações de dese
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">62</div>
-              <p className="text-xs text-gray-500">Aguardando conclusão</p>
+              <p className="text-xs text-gray-500">Aguardando conclusão (Simulado)</p>
             </CardContent>
           </Card>
 
@@ -299,7 +264,7 @@ Este relatório apresenta uma análise completa do ciclo de avaliações de dese
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">30</div>
-              <p className="text-xs text-gray-500">Não iniciadas</p>
+              <p className="text-xs text-gray-500">Não iniciadas (Simulado)</p>
             </CardContent>
           </Card>
         </div>
