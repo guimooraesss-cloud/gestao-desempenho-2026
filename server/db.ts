@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import mysql from "mysql2/promise"; 
+import * as mysql from "mysql2/promise"; // <--- Mudança 1: Importação mais segura
 import { InsertUser, users, employees, positions, competencies } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -10,15 +10,17 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      // <--- AQUI ESTÁ A CORREÇÃO COM "as any" PARA O AIVEN --->
+      // Conexão com SSL ajustada para o Aiven
       const connection = await mysql.createPool({
         uri: process.env.DATABASE_URL,
         ssl: {
           rejectUnauthorized: false
         }
-      } as any); // O "as any" remove o sublinhado vermelho do VS Code
+      } as any); 
       
-      _db = drizzle(connection);
+      // <--- Mudança 2: "as any" aqui também para o Drizzle aceitar o Pool do Aiven
+      _db = drizzle(connection as any);
+
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -99,7 +101,7 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// --- CONSULTAS DE LEITURA (READ) ---
 
 // Employee queries
 export async function getEmployeeById(id: number) {
@@ -153,4 +155,25 @@ export async function getCompetenciesByCategory(category: string) {
   const db = await getDb();
   if (!db) return [];
   return await db.select().from(competencies).where(eq(competencies.category as any, category));
+}
+
+// --- FUNÇÕES DE ESCRITA (CREATE / UPDATE / DELETE) ---
+
+export async function createEmployee(data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Banco desconectado");
+  // O "as any" garante que salve mesmo se o TS reclamar de campos opcionais
+  await db.insert(employees).values(data as any);
+}
+
+export async function updateEmployee(id: number, data: any) {
+  const db = await getDb();
+  if (!db) throw new Error("Banco desconectado");
+  await db.update(employees).set(data).where(eq(employees.id, id));
+}
+
+export async function deleteEmployee(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Banco desconectado");
+  await db.delete(employees).where(eq(employees.id, id));
 }
