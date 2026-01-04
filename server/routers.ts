@@ -1,7 +1,6 @@
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
-// Removido import do cookie-parser pois não é usado aqui diretamente
 
 // --- CONFIGURAÇÃO ---
 const MASTER_EMAIL = "guimooraesss@gmail.com"; 
@@ -26,7 +25,6 @@ export const appRouter = router({
            const employee = employees.find(e => e.id === userData.id);
            
            if (employee) {
-               // Usamos (employee as any).name para garantir que o TS não reclame se o tipo estiver desatualizado
                return { 
                  id: employee.id, 
                  username: (employee as any).name || "Colaborador", 
@@ -48,14 +46,12 @@ export const appRouter = router({
 
         if (email === MASTER_EMAIL) {
           const sessionData = JSON.stringify({ email: email, role: "master", id: 1 });
-          // Forçamos (ctx.res as any) para garantir acesso à função cookie
           (ctx.res as any).cookie("user_session", sessionData, { httpOnly: true, maxAge: 1000 * 60 * 60 * 24 * 7 });
           return { success: true };
         }
 
         const employees = await db.getAllEmployees();
         const employee = employees.find(e => 
-            // Usamos (e as any) para acessar name e email sem erro de tipo
             ((e as any).name || "").toLowerCase().includes(email.split('@')[0]) || 
             (e as any).email === email
         );
@@ -75,35 +71,26 @@ export const appRouter = router({
     }),
   }),
 
-  // --- DASHBOARD (COM LOGS DE DEBUG) ---
+  // --- DASHBOARD ---
   dashboard: router({
     getStats: publicProcedure.query(async () => {
       console.log("--- INICIANDO DASHBOARD ---");
-      
       try {
-        // 1. Busca dados reais
         const employees = await db.getAllEmployees();
         console.log("Colaboradores encontrados (DB):", employees.length);
 
-        // Tenta buscar avaliações
         let evaluations: any[] = [];
         try {
-          // Verifica se a função existe antes de chamar
           if ((db as any).getAllEvaluations) {
             evaluations = await (db as any).getAllEvaluations();
-          } else {
-            console.log("Função getAllEvaluations não existe no db.ts, retornando vazio.");
           }
         } catch (e) {
           console.log("Erro ao buscar avaliações (ignorado):", e);
         }
 
-        // 2. Calcula Totais
         const totalEmployees = employees.length;
         const completed = evaluations.filter(e => e.status === "Concluído" || e.status === "completed").length;
         const inProgress = evaluations.filter(e => e.status === "Em Andamento" || e.status === "in_progress").length;
-        
-        // Pendentes = Total - (Concluídos + Em Andamento)
         const pending = Math.max(0, totalEmployees - (completed + inProgress)); 
         
         console.log("Retornando stats:", { totalEmployees, completed, pending });
@@ -151,10 +138,62 @@ export const appRouter = router({
       .mutation(async ({ input }) => { return { success: true }; }),
   }),
 
-  // --- COLABORADORES ---
+  // --- COLABORADORES (AGORA BLINDADO PARA SALVAR) ---
   employees: router({
     list: publicProcedure.query(async () => db.getAllEmployees()),
+    
     getById: publicProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => db.getEmployeeById(input.id)),
+    
+    create: publicProcedure
+      .input(z.any()) 
+      .mutation(async ({ input }) => {
+        console.log("Tentando criar colaborador (RAW):", input);
+
+        // Tratamento de segurança para não quebrar o banco
+        const dataLimpa = {
+            name: input.name || input.nome, 
+            email: input.email,
+            cpf: input.cpf,
+            badge: input.badge || input.cracha,
+            sector: input.sector || input.setor,
+            
+            // Converte string de data para objeto Date real ou null
+            birthDate: input.birthDate ? new Date(input.birthDate) : null,
+            admissionDate: input.admissionDate ? new Date(input.admissionDate) : null,
+
+            // FORÇA NULL se vier texto nos campos de ID (evita o erro 400)
+            positionId: typeof input.positionId === 'number' ? input.positionId : null,
+            leaderId: typeof input.leaderId === 'number' ? input.leaderId : null,
+            
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+
+        console.log("Dados limpos para salvar:", dataLimpa);
+        await db.createEmployee(dataLimpa); 
+        return { success: true };
+      }),
+
+    update: publicProcedure
+      .input(z.object({ id: z.number(), data: z.any() }))
+      .mutation(async ({ input }) => {
+        // Remove campos perigosos na edição
+        const { id, ...resto } = input.data;
+        
+        // Garante que datas sejam objetos Date
+        if (resto.birthDate) resto.birthDate = new Date(resto.birthDate);
+        if (resto.admissionDate) resto.admissionDate = new Date(resto.admissionDate);
+
+        await db.updateEmployee(input.id, resto);
+        return { success: true };
+      }),
+
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteEmployee(input.id);
+        return { success: true };
+      }),
   }),
 });
 
