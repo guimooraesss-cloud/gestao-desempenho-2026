@@ -2,10 +2,10 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input"; // Importei o componente de Input
+import { Input } from "@/components/ui/input";
 import { BarChart3, Users, Target, FileText, CheckCircle, LogOut, Loader2 } from "lucide-react";
 import { useState } from "react";
-import { api } from "@/lib/trpc"; // Conexão com o backend
+import { trpc } from "@/lib/trpc"; // <--- CORRIGIDO AQUI
 import Dashboard from "./Dashboard";
 import Employees from "./Employees";
 import Evaluations from "./Evaluations";
@@ -21,7 +21,9 @@ export default function Home() {
   // --- LÓGICA DE LOGIN ---
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
-  const loginMutation = api.auth.login.useMutation();
+  
+  // CORRIGIDO AQUI EMBAIXO TAMBÉM (trpc em vez de api)
+  const loginMutation = trpc.auth.login.useMutation();
 
   const handleLogin = async () => {
     if (!email) return;
@@ -107,7 +109,7 @@ export default function Home() {
     );
   }
 
-  // TELA DE LOGIN (Modificada)
+  // TELA DE LOGIN
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 to-indigo-900 flex items-center justify-center px-4">
       <Card className="w-full max-w-md">
